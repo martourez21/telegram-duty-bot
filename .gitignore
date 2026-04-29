@@ -1,1 +1,5 @@
 node_modules/
+.env
+logs.json
+npm-debug.log
+.DS_Store
