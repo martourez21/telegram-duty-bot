@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "username": "@nestormartourez",
+    "type": "START",
+    "timestamp": "2026-04-29T10:40:26.414Z",
+    "task": ""
+  },
+  {
+    "username": "@nestormartourez",
+    "type": "STOP",
+    "timestamp": "2026-04-29T10:40:55.887Z",
+    "comment": ""
+  }
+]

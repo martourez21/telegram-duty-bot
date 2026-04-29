@@ -12,6 +12,7 @@
   "type": "commonjs",
   "dependencies": {
     "dayjs": "^1.11.20",
+    "dotenv": "^17.4.2",
     "node-telegram-bot-api": "^0.63.0"
   }
 }

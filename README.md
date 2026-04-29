@@ -1,82 +1,109 @@
 # ⏱️ Telegram Duty Tracker Bot
 
-A lightweight **Telegram bot for tracking developer working hours** using START / STOP duty logs.  
-Built with Node.js, designed for small engineering teams and remote developers.
+A lightweight production-ready Telegram bot for tracking developer working hours using START / STOP duty logs.
+
+Built for engineering teams, remote developers, and internal productivity tracking.
 
 ---
 
 ## 🚀 Features
 
 - 🟢 Start / Stop duty tracking via Telegram buttons  
-- ⏱️ Automatic timestamp logging (Douala timezone)  
-- 👨‍💻 Multi-developer support (username-based tracking)  
-- 📝 Optional task entry on start  
+- ⏱️ Accurate working time calculation (Douala timezone)  
+- 👨‍💻 Multi-developer support (username + ID tracking)  
+- 📝 Optional task logging on start  
 - 📝 Optional comments on stop  
-- 📊 Admin command to calculate total hours worked  
-- 💾 Simple JSON-based storage (no database required)  
+- 📊 `/hours` report (single user or full team)  
+- 📩 Admin-only DM reports  
+- ⛔ Auto detection of forgotten STOP duty  
+- 🔔 Hourly alerts for long-running sessions  
+- 📅 Daily automated report (18:00 Africa/Douala time)  
+- 💾 Simple JSON file storage (no database required)
 
 ---
 
 ## 🧠 How It Works
 
 1. Developer clicks **Start Duty**
-2. Bot records:
-   - username
-   - start time
-   - optional tasks
+   - Bot records start time, username, and optional tasks
 
-3. Developer clicks **Stop Duty**
-4. Bot records:
-   - stop time
-   - optional comments
+2. Developer clicks **Stop Duty**
+   - Bot records stop time and optional comments
 
-5. Admin can run:
-```
+3. System calculates total working hours per user
 
-/hours
-
-```
-
-to view total hours per developer.
+4. Admins receive:
+   - Daily reports
+   - On-demand `/hours` reports
+   - Overdue duty alerts
 
 ---
 
-## 📦 Tech Stack
+## 📊 Example Output
 
-- Node.js
-- Telegram Bot API
-- Day.js (timezone handling)
-- JSON file storage
+### All Dev Hours
+```
+
+📊 ALL DEV HOURS
+
+@john: 6.20 hrs
+@mary: 4.50 hrs
+@dev2: 8.10 hrs
+
+```
+
+### Single User
+```
+
+📊 DEV REPORT
+
+👤 @john
+⏱ Total Hours: 6.20
+
+````
+
+---
+
+## ⚙️ Tech Stack
+
+- Node.js  
+- Telegram Bot API  
+- Day.js (timezone handling)  
+- node-cron (scheduling)  
+- JSON file storage  
 
 ---
 
 ## 📁 Project Structure
 
 ```
-
 telegram-duty-bot/
 │
-├── index.js          # Main bot logic
-├── logs.json         # Duty logs storage
-├── package.json      # Dependencies
-├── .gitignore        # Ignored files
+├── index.js        # Main bot logic
+├── logs.json       # Duty logs storage
+├── package.json    # Dependencies
+├── .env            # Environment variables
+├── .gitignore      # Ignored files
 └── README.md
-
 ````
 
 ---
 
-## ⚙️ Installation
+## 🔐 Environment Variables
 
-### 1. Clone the repository
-```bash
-git clone https://github.com/your-username/telegram-duty-bot.git
-cd telegram-duty-bot
-````
+Create a `.env` file:
+
+```env
+BOT_TOKEN=your_telegram_bot_token
+GROUP_CHAT_ID=-100xxxxxxxxxx
+ADMIN_IDS=123456789,987654321
+```
 
 ---
 
-### 2. Install dependencies
+## ▶️ Local Setup
+
+### 1. Install dependencies
 
 ```bash
 npm install
@@ -84,129 +111,52 @@ npm install
 
 ---
 
-### 3. Create Telegram Bot
+### 2. Run bot locally
+
+```bash
+node index.js
+```
+
+---
+
+## 🤖 Bot Setup (Telegram)
 
 Use:
 
 BotFather
 
-* Create a bot
-* Copy the token
+Steps:
+
+* Create bot
+* Copy token
+* Add to your group
+* Make bot admin
 
 ---
 
-### 4. Add environment variable
+## 🌍 Deployment
 
-Create `.env` (optional) or set in hosting platform:
-
-```bash
-BOT_TOKEN=your_telegram_bot_token
-```
-
----
-
-### 5. Run locally
-
-```bash
-node index.js
-```
-
----
-
-## ▶️ Usage
-
-### Start the bot
-
-Send:
-
-```
-/start
-```
-
-You will see:
-
-* 🟢 Start Duty
-* 🔴 Stop Duty
-
----
-
-### Admin command
-
-Get total hours:
-
-```
-/hours
-```
-
-Get specific user hours:
-
-```
-/hours @username
-```
-
----
-
-## 🌍 Timezone
-
-All timestamps are recorded in:
-
-```
-Africa/Douala (Cameroon Time)
-```
-
----
-
-## 📊 Example Output
-
-```
-📊 ALL DEV HOURS
-
-@john: 8.50 hrs  
-@mary: 6.25 hrs  
-@dev2: 4.00 hrs
-```
-
----
-
-## 🚀 Deployment
-
-Recommended hosting:
+Recommended platform:
 
 Render
-
-### Start command:
-
-```bash
-node index.js
-```
-
-### Build command:
-
-```bash
-npm install
-```
 
 ---
 
 ## ⚠️ Important Notes
 
-* Do NOT commit `node_modules`
-* Ensure `logs.json` exists
-* Run only one bot instance at a time
-* Keep bot token private
+* ❌ Do NOT commit `node_modules`
+* ❌ Do NOT commit `.env`
+* ✔ Ensure `logs.json` exists
+* ✔ Bot must run as single instance only
+* ✔ Admins must start bot in private chat for DM reports
 
 ---
 
 ## 🔮 Future Improvements
 
-* 📊 Google Sheets export (optional)
-* 🔔 Missed STOP duty alerts
-* 📅 Daily automated reports
-* 📈 Admin dashboard UI
-* 🧠 AI productivity summaries
+* 📊 Admin dashboard (React)
+* 📈 Productivity charts per developer
+* 🧾 PDF weekly reports
+* 🧠 AI productivity scoring
+* 🔔 Slack / Email integration
 
----
-
-## 👨‍💻 Author
-
-Built for internal dev team productivity tracking.
