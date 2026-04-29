@@ -20,6 +20,25 @@ const bot = new TelegramBot(token, { polling: true });
 const LOG_FILE = './logs.json';
 
 // =====================
+// BOT STATE
+// =====================
+let BOT_PAUSED = false;
+let isDailyRunning = false;
+let isHourlyRunning = false;
+
+// =====================
+// ADMIN IDS
+// =====================
+const ADMIN_IDS = (process.env.ADMIN_IDS || '')
+    .split(',')
+    .map(id => parseInt(id))
+    .filter(Boolean);
+
+function isAdmin(userId) {
+    return ADMIN_IDS.includes(userId);
+}
+
+// =====================
 // TIME (DOUALA)
 // =====================
 function getNow() {
@@ -64,9 +83,6 @@ function addLog(entry) {
 // =====================
 const userState = {};
 
-// =====================
-// USER IDENTIFIER
-// =====================
 function getUsername(msg) {
     return msg.from.username
         ? `@${msg.from.username}`
@@ -74,21 +90,14 @@ function getUsername(msg) {
 }
 
 // =====================
-// ADMIN HANDLING
+// ADMIN SENDER
 // =====================
-function getEnvAdmins() {
-    return (process.env.ADMIN_IDS || '')
-        .split(',')
-        .map(id => parseInt(id))
-        .filter(Boolean);
-}
-
 async function getGroupAdmins(chatId) {
     try {
         const admins = await bot.getChatAdministrators(chatId);
         return admins.map(a => a.user.id);
     } catch {
-        return getEnvAdmins();
+        return ADMIN_IDS;
     }
 }
 
@@ -101,7 +110,7 @@ async function sendReportToAdmins(chatId, message) {
 }
 
 // =====================
-// START / STOP UI
+// START BOT UI
 // =====================
 bot.onText(/\/start/, (msg) => {
     bot.sendMessage(msg.chat.id, 'Select action:', {
@@ -140,13 +149,14 @@ bot.on('message', (msg) => {
     const username = getUsername(msg);
 
     if (msg.text && msg.text.startsWith('/')) return;
+    if (BOT_PAUSED) return;
     if (!userState[username]) return;
 
     const state = userState[username];
     const input = msg.text || '';
     const { date, time, iso } = getNow();
 
-    // START
+    // START DUTY
     if (state.action === 'start') {
         const task = input.toLowerCase() === 'skip' ? '' : input;
 
@@ -168,7 +178,7 @@ Tasks: ${task || 'N/A'}
         delete userState[username];
     }
 
-    // STOP
+    // STOP DUTY
     if (state.action === 'stop') {
         const comment = input.toLowerCase() === 'skip' ? '' : input;
 
@@ -217,7 +227,7 @@ function calculateHours(username) {
 }
 
 // =====================
-// /HOURS COMMAND (DM ADMINS)
+// /HOURS (DM ADMINS)
 // =====================
 bot.onText(/\/hours(?:\s+(.+))?/, async (msg, match) => {
     const logs = readLogs();
@@ -241,23 +251,58 @@ bot.onText(/\/hours(?:\s+(.+))?/, async (msg, match) => {
 });
 
 // =====================
-// ACTIVE DUTY CHECK
+// ADMIN COMMANDS
+// =====================
+bot.onText(/\/pause/, (msg) => {
+    if (!isAdmin(msg.from.id)) return;
+    BOT_PAUSED = true;
+    bot.sendMessage(msg.chat.id, "⛔ Bot paused");
+});
+
+bot.onText(/\/resume/, (msg) => {
+    if (!isAdmin(msg.from.id)) return;
+    BOT_PAUSED = false;
+    bot.sendMessage(msg.chat.id, "▶️ Bot resumed");
+});
+
+bot.onText(/\/reset/, (msg) => {
+    if (!isAdmin(msg.from.id)) return;
+    writeLogs([]);
+    bot.sendMessage(msg.chat.id, "🧹 Logs cleared");
+});
+
+bot.onText(/\/summary/, (msg) => {
+    if (!isAdmin(msg.from.id)) return;
+
+    const logs = readLogs();
+    const users = [...new Set(logs.map(l => l.username))];
+
+    let report = `📊 *SYSTEM SUMMARY*\n\n`;
+
+    users.forEach(u => {
+        report += `👤 ${u}: ${calculateHours(u)} hrs\n`;
+    });
+
+    bot.sendMessage(msg.chat.id, report, { parse_mode: 'Markdown' });
+});
+
+// =====================
+// OVERDUE CHECK
 // =====================
 function getActiveSessions() {
     const logs = readLogs();
-    const lastStart = {};
+    const active = {};
 
     logs.forEach(log => {
         if (log.type === 'START') {
-            lastStart[log.username] = log.timestamp;
+            active[log.username] = log.timestamp;
         }
-
         if (log.type === 'STOP') {
-            delete lastStart[log.username];
+            delete active[log.username];
         }
     });
 
-    return lastStart;
+    return active;
 }
 
 function checkOverdueSessions() {
@@ -279,9 +324,12 @@ function checkOverdueSessions() {
 }
 
 // =====================
-// ⏰ DAILY REPORT (18:00)
+// DAILY REPORT (18:00)
 // =====================
 cron.schedule('0 18 * * *', async () => {
+    if (isDailyRunning) return;
+    isDailyRunning = true;
+
     const logs = readLogs();
     const users = [...new Set(logs.map(l => l.username))];
 
@@ -292,32 +340,30 @@ cron.schedule('0 18 * * *', async () => {
     });
 
     const chatId = process.env.GROUP_CHAT_ID;
-    if (chatId) {
-        await sendReportToAdmins(chatId, report);
-    }
-}, {
-    timezone: "Africa/Douala"
-});
+    if (chatId) await sendReportToAdmins(chatId, report);
+
+    setTimeout(() => isDailyRunning = false, 60000);
+}, { timezone: "Africa/Douala" });
 
 // =====================
-// ⛔ HOURLY OVERDUE CHECK
+// HOURLY ALERT
 // =====================
 cron.schedule('0 * * * *', async () => {
+    if (isHourlyRunning) return;
+    isHourlyRunning = true;
+
     const overdue = checkOverdueSessions();
 
-    if (overdue.length === 0) return;
+    if (overdue.length > 0) {
+        let msg = `⛔ *OVERDUE DUTY*\n\n`;
 
-    let message = `⛔ *OVERDUE DUTY ALERT*\n\n`;
+        overdue.forEach(d => {
+            msg += `👤 ${d.user} - ${d.hours} hrs\n`;
+        });
 
-    overdue.forEach(d => {
-        message += `👤 ${d.user} - ${d.hours} hrs active (NO STOP)\n`;
-    });
-
-    const chatId = process.env.GROUP_CHAT_ID;
-
-    if (chatId) {
-        await sendReportToAdmins(chatId, message);
+        const chatId = process.env.GROUP_CHAT_ID;
+        if (chatId) await sendReportToAdmins(chatId, msg);
     }
-}, {
-    timezone: "Africa/Douala"
-});
+
+    setTimeout(() => isHourlyRunning = false, 60000);
+}, { timezone: "Africa/Douala" });
