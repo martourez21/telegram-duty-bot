@@ -3,7 +3,7 @@ require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const dayjs = require('dayjs');
 const fs = require('fs');
-const cron = require('node-cron');
+const express = require('express');
 
 const utc = require('dayjs/plugin/utc');
 const timezone = require('dayjs/plugin/timezone');
@@ -15,31 +15,51 @@ dayjs.extend(timezone);
 // CONFIG
 // =====================
 const token = process.env.BOT_TOKEN;
+
+if (!token) {
+    throw new Error("BOT_TOKEN is missing in environment variables");
+}
+
 const bot = new TelegramBot(token, { polling: true });
 
 const LOG_FILE = './logs.json';
 
 // =====================
+// EXPRESS (RENDER HEALTH CHECK)
+// =====================
+const app = express();
+
+app.get('/', (req, res) => {
+    res.send('Bot is running');
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Health server running on ${PORT}`);
+});
+
+// =====================
 // BOT STATE
 // =====================
 let BOT_PAUSED = false;
-let isDailyRunning = false;
-let isHourlyRunning = false;
+const userState = {};
 
 // =====================
 // ADMIN IDS
 // =====================
-const ADMIN_IDS = (process.env.ADMIN_IDS || '')
-    .split(',')
-    .map(id => parseInt(id))
-    .filter(Boolean);
+function getAdmins() {
+    return (process.env.ADMIN_IDS || '')
+        .split(',')
+        .map(id => parseInt(id.trim()))
+        .filter(Boolean);
+}
 
 function isAdmin(userId) {
-    return ADMIN_IDS.includes(userId);
+    return getAdmins().includes(userId);
 }
 
 // =====================
-// TIME (DOUALA)
+// TIME
 // =====================
 function getNow() {
     const now = dayjs().tz('Africa/Douala');
@@ -81,8 +101,6 @@ function addLog(entry) {
 // =====================
 // USER STATE
 // =====================
-const userState = {};
-
 function getUsername(msg) {
     return msg.from.username
         ? `@${msg.from.username}`
@@ -92,25 +110,22 @@ function getUsername(msg) {
 // =====================
 // ADMIN SENDER
 // =====================
-async function getGroupAdmins(chatId) {
-    try {
-        const admins = await bot.getChatAdministrators(chatId);
-        return admins.map(a => a.user.id);
-    } catch {
-        return ADMIN_IDS;
+async function sendReportToAdmins(message) {
+    const admins = getAdmins();
+
+    for (const adminId of admins) {
+        try {
+            await bot.sendMessage(adminId, message, {
+                parse_mode: 'Markdown'
+            });
+        } catch (err) {
+            console.error(`Failed sending to admin ${adminId}:`, err.message);
+        }
     }
 }
 
-async function sendReportToAdmins(chatId, message) {
-    const admins = await getGroupAdmins(chatId);
-
-    admins.forEach(adminId => {
-        bot.sendMessage(adminId, message, { parse_mode: 'Markdown' });
-    });
-}
-
 // =====================
-// START BOT UI
+// START UI
 // =====================
 bot.onText(/\/start/, (msg) => {
     bot.sendMessage(msg.chat.id, 'Select action:', {
@@ -148,12 +163,13 @@ bot.on('callback_query', (query) => {
 bot.on('message', (msg) => {
     const username = getUsername(msg);
 
-    if (msg.text && msg.text.startsWith('/')) return;
+    if (!msg.text) return;
     if (BOT_PAUSED) return;
+
     if (!userState[username]) return;
 
     const state = userState[username];
-    const input = msg.text || '';
+    const input = msg.text;
     const { date, time, iso } = getNow();
 
     if (state.action === 'start') {
@@ -215,92 +231,57 @@ function calculateHours(username) {
 }
 
 // =====================
-// DATE RANGE CALCULATION
+// COMMANDS
 // =====================
-function calculateHoursInRange(username, startDate, endDate) {
-    const logs = readLogs()
-        .filter(l => l.username === username)
-        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    let totalMs = 0;
-    let start = null;
+// PAUSE
+bot.onText(/\/pause/, (msg) => {
+    if (!isAdmin(msg.from.id)) return;
 
-    const startRange = new Date(startDate);
-    const endRange = new Date(endDate);
-    endRange.setHours(23, 59, 59, 999);
+    BOT_PAUSED = true;
+    bot.sendMessage(msg.chat.id, "⛔ Bot paused");
+});
 
-    for (const log of logs) {
-        const ts = new Date(log.timestamp);
+// RESUME
+bot.onText(/\/resume/, (msg) => {
+    if (!isAdmin(msg.from.id)) return;
 
-        if (log.type === 'START') start = ts;
+    BOT_PAUSED = false;
+    bot.sendMessage(msg.chat.id, "✅ Bot resumed");
+});
 
-        if (log.type === 'STOP' && start) {
-            if (ts >= startRange && ts <= endRange) {
-                totalMs += ts - start;
-            }
-            start = null;
-        }
-    }
+// RESET LOGS
+bot.onText(/\/reset/, (msg) => {
+    if (!isAdmin(msg.from.id)) return;
 
-    return (totalMs / 3600000).toFixed(2);
-}
+    writeLogs([]);
+    bot.sendMessage(msg.chat.id, "🗑 Logs cleared");
+});
 
-// =====================
-// /HOURS COMMAND (UPDATED)
-// =====================
-bot.onText(/\/hours(?:\s+(.+))?/, async (msg, match) => {
+// SUMMARY
+bot.onText(/\/summary/, (msg) => {
     const logs = readLogs();
-    const input = match[1];
+    const users = [...new Set(logs.map(l => l.username))];
 
-    let report = '';
+    let report = `📊 *SUMMARY REPORT*\n\n`;
 
-    if (input) {
-        const parts = input.trim().split(/\s+/);
+    users.forEach(u => {
+        report += `👤 ${u}: ${calculateHours(u)} hrs\n`;
+    });
 
-        if (parts.length === 3) {
-            const [user, start, end] = parts;
-
-            report = `📊 *DEV REPORT*\n\n👤 ${user}\n📅 ${start} → ${end}\n⏱ ${calculateHoursInRange(user, start, end)} hrs`;
-        }
-
-        else if (parts.length === 2) {
-            const [start, end] = parts;
-
-            const users = [...new Set(logs.map(l => l.username))];
-
-            report = `📊 *ALL DEV HOURS*\n\n📅 ${start} → ${end}\n\n`;
-
-            users.forEach(u => {
-                report += `👤 ${u}: ${calculateHoursInRange(u, start, end)} hrs\n`;
-            });
-        }
-
-        else {
-            report = "❌ Invalid format\nUse:\n/hours 2026-01-01 2026-01-31\n/hours @user 2026-01-01 2026-01-31";
-        }
-    }
-
-    else {
-        const users = [...new Set(logs.map(l => l.username))];
-
-        report = `📊 *ALL DEV HOURS (ALL TIME)*\n\n`;
-
-        users.forEach(u => {
-            report += `👤 ${u}: ${calculateHours(u)} hrs\n`;
-        });
-    }
-
-    await sendReportToAdmins(msg.chat.id, report);
+    sendReportToAdmins(report);
 });
 
-const express = require('express');
-const app = express();
+// HOURS
+bot.onText(/\/hours/, (msg) => {
+    const logs = readLogs();
+    const users = [...new Set(logs.map(l => l.username))];
 
-app.get('/', (req, res) => {
-    res.send('Bot is running');
-});
+    let report = `📊 *ALL DEV HOURS*\n\n`;
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Health server running on ${PORT}`);
+    users.forEach(u => {
+        report += `👤 ${u}: ${calculateHours(u)} hrs\n`;
+    });
+
+    sendReportToAdmins(report);
 });
