@@ -292,3 +292,15 @@ bot.onText(/\/hours(?:\s+(.+))?/, async (msg, match) => {
 
     await sendReportToAdmins(msg.chat.id, report);
 });
+
+const express = require('express');
+const app = express();
+
+app.get('/', (req, res) => {
+    res.send('Bot is running');
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Health server running on ${PORT}`);
+});
