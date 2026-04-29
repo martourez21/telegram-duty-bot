@@ -323,6 +323,28 @@ function checkOverdueSessions() {
     return overdue;
 }
 
+bot.onText(/\/admins/, async (msg) => {
+    try {
+        const admins = await bot.getChatAdministrators(msg.chat.id);
+
+        let response = "👮 GROUP ADMINS:\n\n";
+
+        admins.forEach(a => {
+            const user = a.user;
+            response += `👤 ${user.username || user.first_name}\n🆔 ${user.id}\n\n`;
+        });
+
+        bot.sendMessage(msg.chat.id, response);
+    } catch (err) {
+        console.error(err);
+        bot.sendMessage(msg.chat.id, "❌ Failed to fetch admins");
+    }
+});
+
+bot.onText(/\/chatid/, (msg) => {
+    bot.sendMessage(msg.chat.id, `Group ID: ${msg.chat.id}`);
+});
+
 // =====================
 // DAILY REPORT (18:00)
 // =====================

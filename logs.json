@@ -10,5 +10,29 @@
     "type": "STOP",
     "timestamp": "2026-04-29T10:40:55.887Z",
     "comment": ""
+  },
+  {
+    "username": "@nestormartourez",
+    "type": "START",
+    "timestamp": "2026-04-29T10:53:13.240Z",
+    "task": ""
+  },
+  {
+    "username": "@nestormartourez",
+    "type": "STOP",
+    "timestamp": "2026-04-29T10:53:28.562Z",
+    "comment": ""
+  },
+  {
+    "username": "@nestormartourez",
+    "type": "START",
+    "timestamp": "2026-04-29T14:22:58.648Z",
+    "task": "updates on the kafka deployment manifests"
+  },
+  {
+    "username": "@nestormartourez",
+    "type": "STOP",
+    "timestamp": "2026-04-29T14:23:27.824Z",
+    "comment": "fixed kafka issues"
   }
 ]
